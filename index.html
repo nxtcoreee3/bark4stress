@@ -1,32 +1,148 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>HTTP Stress Test</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bark4Stress</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0f111a;
+    color: #e0e0e0;
+    margin: 0;
+    padding: 20px;
+  }
+  h1 { font-size: 28px; color: #3399ff; margin-bottom: 5px; }
+  .sub { color: #99bbff; margin-bottom: 15px; }
+  input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 5px; border: none; }
+  input { width: 80%; }
+  button { background-color: #3399ff; color: #fff; font-weight: bold; }
+  button:hover { background-color: #2277cc; }
+  #stats { margin-top: 20px; font-size: 18px; line-height: 1.5; background: #111229; padding: 15px; border-radius: 8px; }
+  #logs { margin-top: 20px; max-height: 300px; overflow-y: scroll; background: #111229; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 14px; }
+  .running { color: #0f0; font-weight: bold; }
+  .stopped { color: #f33; font-weight: bold; }
+  .log-entry { margin-bottom: 4px; }
+</style>
 </head>
 <body>
-<h2>HTTP Stress Test (Owner Only)</h2>
 
-<input id="url" placeholder="https://yoursite.com" size="40">
-<input id="requests" type="number" value="50">
-<input id="delay" type="number" value="0" placeholder="ms delay">
-<button onclick="run()">Start</button>
+<h1>Bark4Stress</h1>
+<p class="sub">Stress-test your own site responsibly.</p>
 
-<pre id="log"></pre>
+<input id="url" type="text" placeholder="https://yoursite.com">
+<br>
+<button onclick="startFinite()">Run Finite Test</button>
+<button onclick="startInfinite()">Run Infinite Mode</button>
+<button onclick="stopTest()">STOP</button>
+
+<div id="stats">
+  Requests Sent: 0<br>
+  Success: 0<br>
+  Fail: 0<br>
+  Status: <span id="status" class="stopped">STOPPED</span>
+</div>
+
+<div id="logs"></div>
 
 <script>
-async function run() {
-  const url = urlInput.value;
-  const count = +requests.value;
-  const delay = +delayInput.value;
-  for (let i = 0; i < count; i++) {
-    fetch(url, { cache: "no-store" })
-      .then(r => log(`${i}: ${r.status}`))
-      .catch(() => log(`${i}: ERROR`));
-    if (delay) await new Promise(r => setTimeout(r, delay));
+let total = 0, success = 0, fail = 0;
+let running = false;
+let botCounter = 1;
+
+// Update stats panel
+function updateStats() {
+  document.getElementById('stats').innerHTML = `
+    Requests Sent: ${total}<br>
+    Success: ${success}<br>
+    Fail: ${fail}<br>
+    Status: <span id="status" class="${running?'running':'stopped'}">${running?'RUNNING':'STOPPED'}</span>
+  `;
+}
+
+// Add a log entry
+function log(message) {
+  const logs = document.getElementById('logs');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.textContent = message;
+  logs.appendChild(entry);
+  logs.scrollTop = logs.scrollHeight;
+}
+
+// Send single request
+async function sendRequest(url) {
+  const botId = botCounter++;
+  total++;
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (res.ok) {
+      success++;
+      log(`Bot ${botId}: Sent to ${url} → SUCCESS (${res.status}) / ${total}`);
+      return true;
+    } else {
+      fail++;
+      log(`Bot ${botId}: Sent to ${url} → FAIL (${res.status}) / ${total}`);
+      return false;
+    }
+  } catch (err) {
+    fail++;
+    log(`Bot ${botId}: Sent to ${url} → ERROR / ${total}`);
+    return false;
+  } finally {
+    updateStats();
   }
 }
-function log(t){logBox.textContent += t + "\n"}
-const urlInput=url, requests=requests, delayInput=delay, logBox=log;
+
+// Finite mode
+async function startFinite() {
+  if (running) return;
+  running = true;
+  total = 0; success = 0; fail = 0; botCounter = 1;
+  document.getElementById('logs').innerHTML = '';
+  updateStats();
+
+  const url = document.getElementById('url').value;
+  const count = parseInt(prompt("How many requests?", "50") || "50");
+
+  for (let i = 0; i < count; i++) {
+    if (!running) break;
+    await sendRequest(url);
+  }
+
+  running = false;
+  updateStats();
+}
+
+// Infinite mode
+async function startInfinite() {
+  if (running) return;
+  running = true;
+  total = 0; success = 0; fail = 0; botCounter = 1;
+  document.getElementById('logs').innerHTML = '';
+  updateStats();
+
+  const url = document.getElementById('url').value;
+
+  while (running) {
+    const ok = await sendRequest(url);
+    if (!ok) { // stop on first failure
+      log(`Site stopped responding after ${total} requests!`);
+      alert(`Site stopped responding after ${total} requests!`);
+      running = false;
+      updateStats();
+      break;
+    }
+  }
+}
+
+// Stop test manually
+function stopTest() {
+  running = false;
+  log("Test manually stopped.");
+  updateStats();
+}
 </script>
+
 </body>
 </html>
