@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HTTP Stress Test</title>
+</head>
+<body>
+<h2>HTTP Stress Test (Owner Only)</h2>
+
+<input id="url" placeholder="https://yoursite.com" size="40">
+<input id="requests" type="number" value="50">
+<input id="delay" type="number" value="0" placeholder="ms delay">
+<button onclick="run()">Start</button>
+
+<pre id="log"></pre>
+
+<script>
+async function run() {
+  const url = urlInput.value;
+  const count = +requests.value;
+  const delay = +delayInput.value;
+  for (let i = 0; i < count; i++) {
+    fetch(url, { cache: "no-store" })
+      .then(r => log(`${i}: ${r.status}`))
+      .catch(() => log(`${i}: ERROR`));
+    if (delay) await new Promise(r => setTimeout(r, delay));
+  }
+}
+function log(t){logBox.textContent += t + "\n"}
+const urlInput=url, requests=requests, delayInput=delay, logBox=log;
+</script>
+</body>
+</html>
