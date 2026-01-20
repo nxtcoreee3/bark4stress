@@ -5,24 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bark4Stress</title>
 <style>
-  body {
+body {
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     background: #0f111a;
     color: #e0e0e0;
     margin: 0;
     padding: 20px;
-  }
-  h1 { font-size: 28px; color: #3399ff; margin-bottom: 5px; }
-  .sub { color: #99bbff; margin-bottom: 15px; }
-  input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 5px; border: none; }
-  input { width: 80%; }
-  button { background-color: #3399ff; color: #fff; font-weight: bold; }
-  button:hover { background-color: #2277cc; }
-  #stats { margin-top: 20px; font-size: 18px; line-height: 1.5; background: #111229; padding: 15px; border-radius: 8px; }
-  #logs { margin-top: 20px; max-height: 300px; overflow-y: scroll; background: #111229; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 14px; }
-  .running { color: #0f0; font-weight: bold; }
-  .stopped { color: #f33; font-weight: bold; }
-  .log-entry { margin-bottom: 4px; }
+}
+h1 { font-size: 28px; color: #3399ff; margin-bottom: 5px; }
+.sub { color: #99bbff; margin-bottom: 15px; }
+input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 5px; border: none; }
+input { width: 80%; }
+button { background-color: #3399ff; color: #fff; font-weight: bold; }
+button:hover { background-color: #2277cc; }
+#stats { margin-top: 20px; font-size: 18px; line-height: 1.5; background: #111229; padding: 15px; border-radius: 8px; }
+#logs { margin-top: 20px; max-height: 300px; overflow-y: scroll; background: #111229; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 14px; }
+#checker { position: fixed; bottom: 0; left: 0; width: 100%; background: #111229; color: #3399ff; padding: 10px; font-weight: bold; text-align: center; }
+.running { color: #0f0; font-weight: bold; }
+.stopped { color: #f33; font-weight: bold; }
+.log-entry { margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -37,110 +38,141 @@
 <button onclick="stopTest()">STOP</button>
 
 <div id="stats">
-  Requests Sent: 0<br>
-  Success: 0<br>
-  Fail: 0<br>
-  Status: <span id="status" class="stopped">STOPPED</span>
+Requests Sent: 0<br>
+Success: 0<br>
+Fail: 0<br>
+Status: <span id="status" class="stopped">STOPPED</span>
 </div>
 
 <div id="logs"></div>
 
+<div id="checker">Site Status: <span id="siteStatus">IDLE</span></div>
+
 <script>
-let total = 0, success = 0, fail = 0;
+let total = 0, success = 0, fail = 0, botCounter = 1;
 let running = false;
-let botCounter = 1;
+let checkerInterval = null;
 
 // Update stats panel
 function updateStats() {
-  document.getElementById('stats').innerHTML = `
-    Requests Sent: ${total}<br>
-    Success: ${success}<br>
-    Fail: ${fail}<br>
-    Status: <span id="status" class="${running?'running':'stopped'}">${running?'RUNNING':'STOPPED'}</span>
-  `;
+    document.getElementById('stats').innerHTML = `
+        Requests Sent: ${total}<br>
+        Success: ${success}<br>
+        Fail: ${fail}<br>
+        Status: <span id="status" class="${running?'running':'stopped'}">${running?'RUNNING':'STOPPED'}</span>
+    `;
 }
 
 // Add a log entry
 function log(message) {
-  const logs = document.getElementById('logs');
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.textContent = message;
-  logs.appendChild(entry);
-  logs.scrollTop = logs.scrollHeight;
+    const logs = document.getElementById('logs');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.textContent = message;
+    logs.appendChild(entry);
+    logs.scrollTop = logs.scrollHeight;
 }
 
 // Send single request
 async function sendRequest(url) {
-  const botId = botCounter++;
-  total++;
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (res.ok) {
-      success++;
-      log(`Bot ${botId}: Sent to ${url} → SUCCESS (${res.status}) / ${total}`);
-      return true;
-    } else {
-      fail++;
-      log(`Bot ${botId}: Sent to ${url} → FAIL (${res.status}) / ${total}`);
-      return false;
+    const botId = botCounter++;
+    total++;
+    try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (res.ok) {
+            success++;
+            log(`Bot ${botId}: Sent to ${url} → SUCCESS (${res.status}) / ${total}`);
+            return true;
+        } else {
+            fail++;
+            log(`Bot ${botId}: Sent to ${url} → FAIL (${res.status}) / ${total}`);
+            return false;
+        }
+    } catch {
+        fail++;
+        log(`Bot ${botId}: Sent to ${url} → ERROR / ${total}`);
+        return false;
+    } finally {
+        updateStats();
     }
-  } catch (err) {
-    fail++;
-    log(`Bot ${botId}: Sent to ${url} → ERROR / ${total}`);
-    return false;
-  } finally {
-    updateStats();
-  }
 }
 
-// Finite mode
+// Start finite mode
 async function startFinite() {
-  if (running) return;
-  running = true;
-  total = 0; success = 0; fail = 0; botCounter = 1;
-  document.getElementById('logs').innerHTML = '';
-  updateStats();
+    if (running) return;
+    const url = document.getElementById('url').value;
+    const count = parseInt(prompt("How many requests?", "50") || "50");
+    const delay = parseInt(prompt("Delay between requests (ms)?", "50") || "50");
 
-  const url = document.getElementById('url').value;
-  const count = parseInt(prompt("How many requests?", "50") || "50");
+    running = true;
+    total = 0; success = 0; fail = 0; botCounter = 1;
+    document.getElementById('logs').innerHTML = '';
+    updateStats();
+    startSiteChecker(url);
 
-  for (let i = 0; i < count; i++) {
-    if (!running) break;
-    await sendRequest(url);
-  }
-
-  running = false;
-  updateStats();
-}
-
-// Infinite mode
-async function startInfinite() {
-  if (running) return;
-  running = true;
-  total = 0; success = 0; fail = 0; botCounter = 1;
-  document.getElementById('logs').innerHTML = '';
-  updateStats();
-
-  const url = document.getElementById('url').value;
-
-  while (running) {
-    const ok = await sendRequest(url);
-    if (!ok) { // stop on first failure
-      log(`Site stopped responding after ${total} requests!`);
-      alert(`Site stopped responding after ${total} requests!`);
-      running = false;
-      updateStats();
-      break;
+    for (let i = 0; i < count; i++) {
+        if (!running) break;
+        await sendRequest(url);
+        await new Promise(r => setTimeout(r, delay));
     }
-  }
+
+    stopTest();
 }
 
-// Stop test manually
+// Start infinite mode
+async function startInfinite() {
+    if (running) return;
+    const url = document.getElementById('url').value;
+    const delay = parseInt(prompt("Delay between requests (ms)?", "50") || "50");
+
+    running = true;
+    total = 0; success = 0; fail = 0; botCounter = 1;
+    document.getElementById('logs').innerHTML = '';
+    updateStats();
+    startSiteChecker(url);
+
+    while (running) {
+        await sendRequest(url);
+        await new Promise(r => setTimeout(r, delay));
+    }
+}
+
+// Stop test
 function stopTest() {
-  running = false;
-  log("Test manually stopped.");
-  updateStats();
+    running = false;
+    log("Test stopped.");
+    updateStats();
+    stopSiteChecker();
+}
+
+// Site checker
+function startSiteChecker(url) {
+    const statusEl = document.getElementById('siteStatus');
+    statusEl.textContent = 'CHECKING...';
+
+    checkerInterval = setInterval(async () => {
+        if (!running) return;
+        try {
+            const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+            if (res.ok) {
+                statusEl.textContent = 'ONLINE';
+                statusEl.style.color = '#0f0';
+            } else {
+                statusEl.textContent = 'OFFLINE';
+                statusEl.style.color = '#f33';
+            }
+        } catch {
+            statusEl.textContent = 'OFFLINE';
+            statusEl.style.color = '#f33';
+        }
+    }, 3000);
+}
+
+function stopSiteChecker() {
+    if (checkerInterval) clearInterval(checkerInterval);
+    const statusEl = document.getElementById('siteStatus');
+    statusEl.textContent = 'IDLE';
+    statusEl.style.color = '#3399ff';
 }
 </script>
 
